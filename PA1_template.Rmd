@@ -10,6 +10,7 @@ This assignment makes use of data from a personal activity monitoring device. Th
 * Loading the data
 ```{r load_data,echo=TRUE}
   library(RCurl) #if the data source does not exists we need to download from the repository.
+  library(ggplot2) #ggplot2 is used for plotting  
   file_name="activity.csv"
   setInternet2(use = TRUE) #required to support SSL in the url
   url_source="https://raw.githubusercontent.com/juancarlosgarcia/RepData_PeerAssessment1/master/activity.csv"
@@ -19,11 +20,9 @@ This assignment makes use of data from a personal activity monitoring device. Th
   activity_data<-read.csv(file_name,colClasses=c("numeric", "character", "numeric"),header=T)
 ```
 * Transform the data into an aggregate format suitable for the analysis
-```{r transform_data,echo=TRUE}
-  activity_day <- aggregate (steps ~ date, data=activity_data, FUN=sum)
+```{r transform_data,echo=TRUE}  
   activity_inv <- aggregate (activity_data$steps,by=list(interval=activity_data$interval),FUN=mean,na.rm=T )
   colnames(activity_inv)<-c("interval","steps")
-  activity_inv$interval<-as.integer(activity_inv$interval)
 ```
 
 
@@ -31,20 +30,27 @@ This assignment makes use of data from a personal activity monitoring device. Th
 * This is a histogram of the total number of steps taken each day
 
 ```{r make_histogram,echo=TRUE}
-  library(ggplot2) #ggplot2 is used for plotting
+plot_histogram <- function (activity_day,steps_mean,steps_median) {
+  .e = environment()
+  point_labels=c(paste(" Mean:",steps_mean),paste(" Median:",steps_median))
+  point_color_1 = "red"
+  point_color_2 = "black"
+  color_list=c(point_color_1,point_color_2)
   
-  steps_mean<-round(mean(activity_day$steps),0)
-  steps_median<-round(median(activity_day$steps),0)
-  point_labels<-c(paste(" Mean:",steps_mean),paste(" Median:",steps_median))
-  color_names<-c("red","black")
-  ggplot (activity_day, aes(x=steps)) +
-    geom_histogram(fill="orange", binwidth=800) + 
-    geom_point(aes(x=steps_mean,y=0,color=color_names[1]),size=4,shape=12) +
-    geom_point(aes(x=steps_median,y=0,color=color_names[2]),size=4,shape=10) +
-    scale_color_manual(name=element_blank(),labels=point_labels, values=color_names) +
+  ggplot (activity_day, aes(x=steps), environment=.e) +
+    geom_histogram(fill="orange", binwidth=1400) + 
+    geom_point(aes(x=steps_mean,y=0,color=point_color_1),size=4,shape=12) +
+    geom_point(aes(x=steps_median,y=0,color=point_color_2),size=4,shape=10) +
+    scale_color_manual(name=element_blank(),labels=point_labels, values=color_list) +
     labs(title="Histogram of Steps per Day",x="Number of Steps",y="Count") +
     theme_bw() + theme(legend.position="bottom")
-  
+}
+
+activity_day <- aggregate (steps ~ date, data=activity_data, FUN=sum)
+steps_mean<-round(mean(activity_day$steps),0)
+steps_median<-round(median(activity_day$steps),0)
+
+plot_histogram(activity_day,steps_mean,steps_median)
 ```
 * The mean and median total number of steps taken per day are :
  - **`r paste("Mean:", steps_mean)`**
@@ -72,11 +78,39 @@ This is a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) a
 There are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
 
 ```{r impute_data,echo=TRUE}
-  indexes_na <- which(is.na(activity_data$steps))
+  indices_na <- which(is.na(activity_data$steps))
 
+  replace_na <- unlist(lapply(indices_na, FUN=function(index) {
+            interval = activity_data[index,]$interval
+            activity_inv[activity_inv$interval==interval,]$steps            
+        }))
 
-
+  activity_imputed <- data.frame ( 
+    steps     = activity_data$steps,
+    date      = activity_data$date,
+    interval  = activity_data$interval
+  )
+  activity_imputed$steps[indices_na]<-replace_na
 ```
+* The summary of the new dataset with imputed values is :
+```{r summary_impute_data,echo=TRUE}
+summary(activity_imputed)
+```
+* This is the histogram based on the imputed dataset
+```{r histogram_impute_data,echo=TRUE}
+activity_imputed_day <- aggregate (steps ~ date, data=activity_imputed, FUN=sum)
+steps_imputed_mean<-round(mean(activity_imputed_day$steps),0)
+steps_imputed_median<-round(median(activity_imputed_day$steps),0)
+
+plot_histogram(activity_imputed_day,steps_imputed_mean,steps_imputed_median)
+```
+* Comparing with the metrics with the original activity dataset in the first section of this document, we observe that while the mean value remains the same, the median value has shifted closer to the mean.
+
+* The mean and median total number of steps taken per day are :
+ - **`r paste("Mean:", steps_imputed_mean)`**
+ - **`r paste("Median:", steps_imputed_median)`**
+
+## Are there differences in activity patterns between weekdays and weekends?
 
 
 [1]:http://www.fitbit.com/ec
