@@ -17,12 +17,22 @@ This assignment makes use of data from a personal activity monitoring device. Th
   if (!file.exists(file_name)) {
       download.file(url_source,destfile=file_name,method="auto")
   }
-  activity_data<-read.csv(file_name,colClasses=c("numeric", "character", "numeric"),header=T)
+
+  ## A new class is required to handle the date format.
+  setClass('myDate')
+  setAs("character","myDate", function(from) as.Date(from, format="%Y-%m-%d"))
+
+  activity_data<-read.csv(file_name,colClasses=c("numeric", "myDate", "numeric"),header=T)
 ```
 * Transform the data into an aggregate format suitable for the analysis
-```{r transform_data,echo=TRUE}  
-  activity_inv <- aggregate (activity_data$steps,by=list(interval=activity_data$interval),FUN=mean,na.rm=T )
-  colnames(activity_inv)<-c("interval","steps")
+```{r transform_data,echo=TRUE} 
+calc_interval_activity <- function (activity_ds) {
+    activity_inv <- aggregate (activity_ds$steps,by=list(interval=activity_ds$interval),FUN=mean,na.rm=T )
+    
+    colnames(activity_inv)<-c("interval","steps")
+    
+    activity_inv
+  }
 ```
 
 
@@ -60,6 +70,7 @@ plot_histogram(activity_day,steps_mean,steps_median)
 This is a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
 
 ```{r daily_pattern,echo=TRUE}
+  activity_inv <- calc_interval_activity (activity_data)
   steps_max<-which.max(activity_inv$steps)
   interval_max <- activity_inv[steps_max,]$interval
   point_labels <- c(paste(" Maximun Activity Interval:",interval_max)) 
@@ -111,6 +122,45 @@ plot_histogram(activity_imputed_day,steps_imputed_mean,steps_imputed_median)
  - **`r paste("Median:", steps_imputed_median)`**
 
 ## Are there differences in activity patterns between weekdays and weekends?
+* The comparison plot is based on the filled-in missing values.
+
+1. Calculate the day of the week
+2. Subset the table into two parts - weekends (Saturday and Sunday) and weekdays (Monday through Friday).
+3. Aggregate the average steps per interval for each dataset.
+4. Plot the two datasets side by side.
+
+```{r weekend_vs_weekday,echo=TRUE}
+  calc_week_activity <- function(activity_ds) {
+      activity_ds$weekday<-as.factor(weekdays(activity_ds$date))
+      
+      wkend_data <- subset(activity_ds,weekday %in% c("Saturday","Sunday"))
+      wkday_data <- subset(activity_ds,!weekday %in% c("Saturday","Sunday"))
+
+      
+      wkend_interval <- calc_interval_activity(wkend_data)
+      wkday_interval <- calc_interval_activity(wkday_data)
+
+      
+      wkend_interval$daytype <- rep("weekend",nrow(wkend_interval))
+      wkday_interval$daytype <- rep("weekday",nrow(wkday_interval))
+      
+      activity_week<- rbind(wkend_interval,wkday_interval)
+      activity_week
+  }
+    
+  activity_week<-calc_week_activity(activity_imputed)
+
+  ggplot(activity_week, aes(x=interval,y=steps)) + 
+  geom_line(color="orange",size=1) + 
+  facet_wrap(~daytype,nrow=2,ncol=1) +
+  labs(x="Interval",y="Number of Steps") + 
+  theme_bw()
+
+```
+
+* We observe that : 
+  - The activity on the weekends is constant over the day compared to the weekdays that is more activity in the morning.
+  - This could be due to the fact that activities on weekdays mostly follow a work related routine, whereas weekends anytime is good for the activity.
 
 
 [1]:http://www.fitbit.com/ec
